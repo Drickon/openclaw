@@ -167,22 +167,6 @@ export async function dispatchReplyFromConfig(params: {
 
   const hookRunner = getGlobalHookRunner();
 
-  // Extract message context for hooks (plugin and internal)
-  const timestamp =
-    typeof ctx.Timestamp === "number" && Number.isFinite(ctx.Timestamp) ? ctx.Timestamp : undefined;
-  const messageIdForHook =
-    ctx.MessageSidFull ?? ctx.MessageSid ?? ctx.MessageSidFirst ?? ctx.MessageSidLast;
-  const content =
-    typeof ctx.BodyForCommands === "string"
-      ? ctx.BodyForCommands
-      : typeof ctx.RawBody === "string"
-        ? ctx.RawBody
-        : typeof ctx.Body === "string"
-          ? ctx.Body
-          : "";
-  const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
-  const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
-
   // Trigger plugin hooks (fire-and-forget)
   if (hookRunner?.hasHooks("message_received")) {
     void hookRunner
