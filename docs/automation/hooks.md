@@ -201,6 +201,29 @@ const myHandler = async (event) => {
 export default myHandler;
 ```
 
+**Example: Logging all incoming messages**
+
+```typescript
+import type { HookHandler } from "../../src/hooks/hooks.js";
+
+const messageLogger: HookHandler = async (event) => {
+  // Only trigger on message:received
+  if (event.type !== "message" || event.action !== "received") {
+    return;
+  }
+
+  console.log(`[message-logger] Message received`);
+  console.log(`  From: ${event.context.from}`);
+  console.log(`  Channel: ${event.context.channelId}`);
+  console.log(`  Content: ${event.context.content}`);
+  console.log(`  Timestamp: ${event.timestamp.toISOString()}`);
+
+  // Your custom logic here (e.g., log to file, send to webhook, etc.)
+};
+
+export default messageLogger;
+```
+
 #### Event Context
 
 Each event includes:
@@ -260,6 +283,8 @@ Triggered when messages are received or sent:
 - **`message`**: All message events (general listener)
 - **`message:received`**: When an inbound message is received from any channel
 - **`message:sent`**: When an outbound message is successfully sent
+
+- **`message:transcribed`**: When a message has been fully processed, including audio transcription. At this point, `content` includes the full transcript text for audio messages. Use this hook when you need access to transcribed audio content.
 
 #### Message Event Context
 
