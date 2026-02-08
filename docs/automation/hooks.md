@@ -344,6 +344,8 @@ const handler = async (event) => {
 export default handler;
 ```
 
+- **`message:sent`**: When the agent's reply has been fully dispatched to the channel. Fires after all reply payloads (block streaming, final reply, TTS) have been delivered. Use this for audit logging, analytics, or post-reply workflows.
+
 ### Tool Result Hooks (Plugin API)
 
 These hooks are not event-stream listeners; they let plugins synchronously adjust tool results before OpenClaw persists them.
