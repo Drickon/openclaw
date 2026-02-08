@@ -6,6 +6,7 @@ import { syncUrlWithSessionKey } from "./app-settings.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { patchSession } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -82,6 +83,21 @@ export function renderTab(state: AppViewState, tab: Tab) {
   `;
 }
 
+function resolveModelDisplayName(provider: string, modelId: string): string {
+  // Strip provider prefix if present in modelId
+  const shortId = modelId.replace(/^.*\//, "");
+  // Common friendly names
+  const friendlyNames: Record<string, string> = {
+    "claude-sonnet-4-5": "Sonnet 4.5",
+    "claude-haiku-4-5": "Haiku 4.5",
+    "claude-opus-4-5": "Opus 4.5",
+    "claude-opus-4-6": "Opus 4.6",
+    "claude-sonnet-4-0": "Sonnet 4.0",
+    "claude-haiku-4-0": "Haiku 4.0",
+  };
+  return friendlyNames[shortId] ?? shortId;
+}
+
 export function renderChatControls(state: AppViewState) {
   const mainSessionKey = resolveMainSessionKey(state.hello, state.sessionsResult);
   const sessionOptions = resolveSessionOptions(
@@ -93,6 +109,13 @@ export function renderChatControls(state: AppViewState) {
   const disableFocusToggle = state.onboarding;
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const focusActive = state.onboarding ? true : state.settings.chatFocusMode;
+
+  // Model switcher state
+  const activeSession = state.sessionsResult?.sessions?.find((s) => s.key === state.sessionKey);
+  const currentModel = activeSession?.model ?? state.sessionsResult?.defaults?.model ?? null;
+  const currentProvider = activeSession?.modelProvider ?? "anthropic";
+  const currentModelKey = currentModel ? `${currentProvider}/${currentModel}` : null;
+  const modelCatalog = state.chatModelCatalog ?? [];
   // Refresh icon
   const refreshIcon = html`
     <svg
@@ -166,6 +189,31 @@ export function renderChatControls(state: AppViewState) {
           )}
         </select>
       </label>
+      ${
+        modelCatalog.length > 0
+          ? html`
+          <label class="field chat-controls__model">
+            <select
+              .value=${currentModelKey ?? ""}
+              ?disabled=${!state.connected || state.chatModelCatalogLoading}
+              @change=${(e: Event) => {
+                const value = (e.target as HTMLSelectElement).value;
+                void patchSession(state, state.sessionKey, {
+                  model: value || null,
+                });
+              }}
+              title="Switch model"
+            >
+              ${modelCatalog.map((m) => {
+                const key = `${m.provider}/${m.id}`;
+                const display = resolveModelDisplayName(m.provider, m.id);
+                return html`<option value=${key} ?selected=${key === currentModelKey}>${display}</option>`;
+              })}
+            </select>
+          </label>
+        `
+          : html``
+      }
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}

@@ -4,6 +4,7 @@ import { setLastActiveSessionKey } from "./app-settings.ts";
 import { resetToolStream } from "./app-tool-stream.ts";
 import type { OpenClawApp } from "./app.ts";
 import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat.ts";
+import { loadModelCatalog } from "./controllers/models.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import type { GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
@@ -208,6 +209,7 @@ export async function refreshChat(host: ChatHost, opts?: { scheduleScroll?: bool
     loadSessions(host as unknown as OpenClawApp, {
       activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
     }),
+    loadModelCatalog(host as unknown as OpenClawApp),
     refreshChatAvatar(host),
   ]);
   if (opts?.scheduleScroll !== false) {

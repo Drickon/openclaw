@@ -236,6 +236,8 @@ export type AppViewState = {
   skillEdits: Record<string, string>;
   skillMessages: Record<string, SkillMessage>;
   skillsBusyKey: string | null;
+  chatModelCatalog: Array<{ id: string; name: string; provider: string }>;
+  chatModelCatalogLoading: boolean;
   debugLoading: boolean;
   debugStatus: StatusSummary | null;
   debugHealth: HealthSnapshot | null;
@@ -304,6 +306,8 @@ export type AppViewState = {
   handleLoadNodes: () => Promise<void>;
   handleLoadPresence: () => Promise<void>;
   handleLoadSkills: () => Promise<void>;
+  handleLoadModelCatalog: () => Promise<void>;
+  handleChatModelChange: (model: string | null) => Promise<void>;
   handleLoadDebug: () => Promise<void>;
   handleLoadLogs: () => Promise<void>;
   handleDebugCall: () => Promise<void>;
