@@ -138,6 +138,13 @@ export async function getReplyFromConfig(
     });
   }
 
+  const channelId = (
+    finalized.OriginatingChannel ??
+    finalized.Surface ??
+    finalized.Provider ??
+    ""
+  ).toLowerCase();
+
   // Trigger message:transcribed hook after media understanding completes
   // Only fire if transcription actually occurred (skip in fast test mode or non-audio)
   if (finalized.Transcript) {
@@ -149,12 +156,7 @@ export async function getReplyFromConfig(
         bodyForAgent: finalized.BodyForAgent,
         transcript: finalized.Transcript,
         timestamp: finalized.Timestamp,
-        channelId: (
-          finalized.OriginatingChannel ??
-          finalized.Surface ??
-          finalized.Provider ??
-          ""
-        ).toLowerCase(),
+        channelId,
         conversationId: finalized.OriginatingTo ?? finalized.To ?? finalized.From ?? undefined,
         messageId: finalized.MessageSid,
         senderId: finalized.SenderId,
@@ -170,6 +172,35 @@ export async function getReplyFromConfig(
       logVerbose(`get-reply: message:transcribed internal hook failed: ${String(err)}`);
     });
   }
+
+  // Trigger message:preprocessed hook after all media + link understanding.
+  // Fires for every message, giving hooks access to the fully enriched body
+  // (transcripts, image descriptions, link summaries) before the agent sees it.
+  void triggerInternalHook(
+    createInternalHookEvent("message", "preprocessed", finalized.SessionKey ?? "", {
+      from: finalized.From,
+      to: finalized.To,
+      body: finalized.Body,
+      bodyForAgent: finalized.BodyForAgent,
+      transcript: finalized.Transcript,
+      timestamp: finalized.Timestamp,
+      channelId,
+      conversationId: finalized.OriginatingTo ?? finalized.To ?? finalized.From ?? undefined,
+      messageId: finalized.MessageSid,
+      senderId: finalized.SenderId,
+      senderName: finalized.SenderName,
+      senderUsername: finalized.SenderUsername,
+      provider: finalized.Provider,
+      surface: finalized.Surface,
+      mediaPath: finalized.MediaPath,
+      mediaType: finalized.MediaType,
+      isGroup: Boolean(finalized.IsGroup),
+      groupId: finalized.GroupId,
+      cfg,
+    }),
+  ).catch((err) => {
+    logVerbose(`get-reply: message:preprocessed internal hook failed: ${String(err)}`);
+  });
 
   const commandAuthorized = finalized.CommandAuthorized;
   resolveCommandAuthorization({
