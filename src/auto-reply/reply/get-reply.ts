@@ -194,8 +194,11 @@ export async function getReplyFromConfig(
       surface: finalized.Surface,
       mediaPath: finalized.MediaPath,
       mediaType: finalized.MediaType,
-      isGroup: Boolean(finalized.IsGroup),
-      groupId: finalized.GroupId,
+      isGroup: Boolean(finalized.GroupSubject || finalized.GroupChannel),
+      groupId:
+        finalized.From?.includes(":group:") || finalized.From?.includes(":channel:")
+          ? finalized.From
+          : undefined,
       cfg,
     }),
   ).catch((err) => {
