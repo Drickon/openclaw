@@ -114,6 +114,68 @@ describe("message hooks", () => {
     });
   });
 
+  describe("message:preprocessed", () => {
+    it("should trigger handler registered for message:preprocessed", async () => {
+      const handler = vi.fn();
+      registerInternalHook("message:preprocessed", handler);
+
+      const event = createInternalHookEvent("message", "preprocessed", "session-1", {
+        from: "user:123",
+        to: "bot:456",
+        body: "Check out this link",
+        bodyForAgent: "Check out this link\n[Link summary: Article about testing]",
+        channelId: "telegram",
+        senderId: "123",
+        senderName: "Eric",
+        isGroup: false,
+      });
+      await triggerInternalHook(event);
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0][0].action).toBe("preprocessed");
+      expect(handler.mock.calls[0][0].context.bodyForAgent).toContain("Link summary");
+    });
+
+    it("should include both transcript and link summary for enriched audio messages", async () => {
+      const handler = vi.fn();
+      registerInternalHook("message:preprocessed", handler);
+
+      const event = createInternalHookEvent("message", "preprocessed", "session-1", {
+        body: "🎤 [Audio]",
+        bodyForAgent: "[Audio] Transcript: Check https://example.com\n[Link summary: Example site]",
+        transcript: "Check https://example.com",
+        channelId: "telegram",
+        mediaType: "audio/ogg",
+        isGroup: false,
+      });
+      await triggerInternalHook(event);
+
+      const ctx = handler.mock.calls[0][0].context;
+      expect(ctx.transcript).toBe("Check https://example.com");
+      expect(ctx.bodyForAgent).toContain("Link summary");
+      expect(ctx.bodyForAgent).toContain("Transcript:");
+    });
+
+    it("should fire for plain text messages without media", async () => {
+      const handler = vi.fn();
+      registerInternalHook("message:preprocessed", handler);
+
+      const event = createInternalHookEvent("message", "preprocessed", "session-1", {
+        body: "Just a text message",
+        bodyForAgent: "Just a text message",
+        channelId: "signal",
+        isGroup: false,
+      });
+      await triggerInternalHook(event);
+
+      expect(handler).toHaveBeenCalledOnce();
+      const ctx = handler.mock.calls[0][0].context;
+      expect(ctx.transcript).toBeUndefined();
+      expect(ctx.mediaType).toBeUndefined();
+      expect(ctx.body).toBe("Just a text message");
+    });
+  });
+
   describe("message:sent", () => {
     it("should trigger handler registered for message:sent", async () => {
       const handler = vi.fn();
@@ -159,7 +221,7 @@ describe("message hooks", () => {
   });
 
   describe("general message handler", () => {
-    it("should receive all message event types (received, transcribed, sent)", async () => {
+    it("should receive all message event types (received, transcribed, preprocessed, sent)", async () => {
       const events: InternalHookEvent[] = [];
       registerInternalHook("message", (event) => {
         events.push(event);
@@ -172,13 +234,20 @@ describe("message hooks", () => {
         createInternalHookEvent("message", "transcribed", "s1", { transcript: "hello" }),
       );
       await triggerInternalHook(
+        createInternalHookEvent("message", "preprocessed", "s1", {
+          body: "hello",
+          bodyForAgent: "hello",
+        }),
+      );
+      await triggerInternalHook(
         createInternalHookEvent("message", "sent", "s1", { content: "reply" }),
       );
 
-      expect(events).toHaveLength(3);
+      expect(events).toHaveLength(4);
       expect(events[0].action).toBe("received");
       expect(events[1].action).toBe("transcribed");
-      expect(events[2].action).toBe("sent");
+      expect(events[2].action).toBe("preprocessed");
+      expect(events[3].action).toBe("sent");
     });
 
     it("should trigger both general and specific handlers for same event", async () => {
