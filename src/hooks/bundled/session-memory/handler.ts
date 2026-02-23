@@ -5,9 +5,11 @@
  * Creates a new dated memory file with LLM-generated slug
  */
 
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { resolveAgentWorkspaceDir } from "../../../agents/agent-scope.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import { resolveStateDir } from "../../../config/paths.js";
@@ -18,6 +20,7 @@ import { resolveHookConfig } from "../../config.js";
 import type { HookHandler } from "../../hooks.js";
 import { generateSlugViaLLM } from "../../llm-slug-generator.js";
 
+const execAsync = promisify(exec);
 const log = createSubsystemLogger("hooks/session-memory");
 
 /**
@@ -280,6 +283,29 @@ const saveSessionToMemory: HookHandler = async (event) => {
       filename,
       path: memoryFilePath.replace(os.homedir(), "~"),
     });
+
+    // Try structured extraction via extract-memories.py first
+    try {
+      const extractScript = path.join(workspaceDir, "tools", "extract-memories.py");
+      await fs.access(extractScript); // Throws if script doesn't exist
+
+      const sessionId = currentSessionId || path.basename(sessionFile || "").replace(".jsonl", "");
+      if (sessionId) {
+        const { stdout } = await execAsync(`python3 "${extractScript}" --session "${sessionId}"`, {
+          timeout: 120_000,
+          cwd: workspaceDir,
+        });
+        log.info("Structured extraction completed", {
+          sessionId,
+          stdout: stdout.slice(0, 200),
+        });
+        return; // Done — extraction handled summarization, promotion, and task creation
+      }
+    } catch (extractErr) {
+      log.warn("Structured extraction failed, falling back to raw excerpts", {
+        error: extractErr instanceof Error ? extractErr.message : String(extractErr),
+      });
+    }
 
     // Format time as HH:MM:SS UTC
     const timeStr = now.toISOString().split("T")[1].split(".")[0];
