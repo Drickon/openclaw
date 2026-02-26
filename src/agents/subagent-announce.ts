@@ -72,10 +72,15 @@ function buildCompletionDeliveryMessage(params: {
   outcome?: SubagentRunOutcome;
   announceType?: SubagentAnnounceType;
 }): string {
-  const findingsText = params.findings.trim();
-  if (isAnnounceSkip(findingsText)) {
+  const MAX_FINDINGS_CHARS = 3_000;
+  const rawFindings = params.findings.trim();
+  if (isAnnounceSkip(rawFindings)) {
     return "";
   }
+  const findingsTruncated = rawFindings.length > MAX_FINDINGS_CHARS;
+  const findingsText = findingsTruncated
+    ? `${rawFindings.slice(0, MAX_FINDINGS_CHARS)}\n…_(output truncated — use sessions_history for full results)_`
+    : rawFindings;
   const hasFindings = findingsText.length > 0 && findingsText !== "(no output)";
   // Cron completions are standalone messages — skip the subagent status header.
   if (params.announceType === "cron job") {
