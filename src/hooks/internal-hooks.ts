@@ -110,8 +110,23 @@ export interface InternalHookEvent {
 
 export type InternalHookHandler = (event: InternalHookEvent) => Promise<void> | void;
 
-/** Registry of hook handlers by event key */
-const handlers = new Map<string, InternalHookHandler[]>();
+/** Registry of hook handlers by event key
+ *
+ * Uses a process-global singleton to survive bundle splitting.
+ * When internal-hooks.ts is duplicated across multiple Rollup chunks
+ * (e.g. reply-*.js and pi-embedded-*.js), each chunk gets its own
+ * module instance with a separate Map. Using globalThis ensures all
+ * instances share the same backing store regardless of which chunk
+ * calls registerInternalHook vs triggerInternalHook.
+ */
+const GLOBAL_KEY = "__openclaw_internal_hook_handlers__";
+if (!(globalThis as Record<string, unknown>)[GLOBAL_KEY]) {
+  (globalThis as Record<string, unknown>)[GLOBAL_KEY] = new Map<string, InternalHookHandler[]>();
+}
+const handlers = (globalThis as Record<string, unknown>)[GLOBAL_KEY] as Map<
+  string,
+  InternalHookHandler[]
+>;
 const log = createSubsystemLogger("internal-hooks");
 
 /**
