@@ -244,6 +244,107 @@ function collectConfigSecrets(params: {
     }
   }
 
+  // hooks.token
+  const hooksToken = (params.config.hooks as { token?: unknown } | undefined)?.token;
+  const hooksTokenRef = coerceSecretRef(hooksToken, defaults);
+  if (hooksTokenRef) {
+    params.collector.refAssignments.push({
+      file: params.configPath,
+      path: "hooks.token",
+      ref: hooksTokenRef,
+      expected: "string",
+    });
+  } else if (isNonEmptyString(hooksToken)) {
+    addFinding(params.collector, {
+      code: "PLAINTEXT_FOUND",
+      severity: "warn",
+      file: params.configPath,
+      jsonPath: "hooks.token",
+      message: "hooks.token is stored as plaintext.",
+    });
+  }
+
+  // gateway.auth.token
+  const gatewayAuthToken = (params.config.gateway?.auth as { token?: unknown } | undefined)?.token;
+  const gatewayAuthTokenRef = coerceSecretRef(gatewayAuthToken, defaults);
+  if (gatewayAuthTokenRef) {
+    params.collector.refAssignments.push({
+      file: params.configPath,
+      path: "gateway.auth.token",
+      ref: gatewayAuthTokenRef,
+      expected: "string",
+    });
+  } else if (isNonEmptyString(gatewayAuthToken)) {
+    addFinding(params.collector, {
+      code: "PLAINTEXT_FOUND",
+      severity: "warn",
+      file: params.configPath,
+      jsonPath: "gateway.auth.token",
+      message: "gateway.auth.token is stored as plaintext.",
+    });
+  }
+
+  // channels.telegram.botToken (top-level and per-account)
+  const telegramCfg = params.config.channels?.telegram as
+    | { botToken?: unknown; accounts?: Record<string, unknown> }
+    | undefined;
+  if (telegramCfg) {
+    const collectTelegramBotToken = (botToken: unknown, pathLabel: string) => {
+      const ref = coerceSecretRef(botToken, defaults);
+      if (ref) {
+        params.collector.refAssignments.push({
+          file: params.configPath,
+          path: pathLabel,
+          ref,
+          expected: "string",
+        });
+        return;
+      }
+      if (isNonEmptyString(botToken)) {
+        addFinding(params.collector, {
+          code: "PLAINTEXT_FOUND",
+          severity: "warn",
+          file: params.configPath,
+          jsonPath: pathLabel,
+          message: "Telegram botToken is stored as plaintext.",
+        });
+      }
+    };
+    collectTelegramBotToken(telegramCfg.botToken, "channels.telegram.botToken");
+    if (isRecord(telegramCfg.accounts)) {
+      for (const [accountId, accountValue] of Object.entries(telegramCfg.accounts)) {
+        if (isRecord(accountValue)) {
+          collectTelegramBotToken(
+            accountValue.botToken,
+            `channels.telegram.accounts.${accountId}.botToken`,
+          );
+        }
+      }
+    }
+  }
+
+  // tools.web.search.apiKey
+  const webSearchApiKey = (
+    params.config.tools as { web?: { search?: { apiKey?: unknown } } } | undefined
+  )?.web?.search?.apiKey;
+  const webSearchRef = coerceSecretRef(webSearchApiKey, defaults);
+  if (webSearchRef) {
+    params.collector.refAssignments.push({
+      file: params.configPath,
+      path: "tools.web.search.apiKey",
+      ref: webSearchRef,
+      expected: "string",
+    });
+  } else if (isNonEmptyString(webSearchApiKey)) {
+    addFinding(params.collector, {
+      code: "PLAINTEXT_FOUND",
+      severity: "warn",
+      file: params.configPath,
+      jsonPath: "tools.web.search.apiKey",
+      message: "tools.web.search.apiKey is stored as plaintext.",
+    });
+  }
+
   const googlechat = params.config.channels?.googlechat as
     | {
         serviceAccount?: unknown;

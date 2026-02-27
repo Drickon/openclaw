@@ -6,6 +6,7 @@ import {
   GroupChatSchema,
   HumanDelaySchema,
   IdentitySchema,
+  SecretInputSchema,
   ToolsLinksSchema,
   ToolsMediaSchema,
 } from "./zod-schema.core.js";
@@ -266,7 +267,7 @@ export const ToolsWebSearchSchema = z
         z.literal("kimi"),
       ])
       .optional(),
-    apiKey: z.string().optional().register(sensitive),
+    apiKey: SecretInputSchema.optional().register(sensitive),
     maxResults: z.number().int().positive().optional(),
     timeoutSeconds: z.number().int().positive().optional(),
     cacheTtlMinutes: z.number().nonnegative().optional(),
