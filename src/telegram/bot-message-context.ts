@@ -709,6 +709,10 @@ export const buildTelegramMessageContext = async ({
     // Originating channel for reply routing.
     OriginatingChannel: "telegram" as const,
     OriginatingTo: `telegram:${chatId}`,
+    // Populate Transcript from preflight so message:transcribed hook fires
+    // (main media runner skips audio with alreadyTranscribed=true, so ctx.Transcript
+    // would otherwise never be set — see apply.ts + attachments.ts)
+    Transcript: preflightTranscript || undefined,
   });
 
   await recordInboundSession({
