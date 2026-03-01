@@ -46,6 +46,22 @@ type GoogleChatAccountLike = {
   accounts?: Record<string, unknown>;
 };
 
+type HooksConfigLike = {
+  token?: unknown;
+};
+
+type GatewayAuthConfigLike = {
+  token?: unknown;
+};
+
+type TelegramAccountLike = {
+  botToken?: unknown;
+};
+
+type WebSearchConfigLike = {
+  apiKey?: unknown;
+};
+
 type ApiKeyCredentialLike = AuthProfileCredential & {
   type: "api_key";
   key?: string;
@@ -195,6 +211,110 @@ function collectGoogleChatAssignments(params: {
   }
 }
 
+function collectHooksTokenAssignment(params: {
+  hooks: HooksConfigLike;
+  defaults: SecretDefaults | undefined;
+  context: ResolverContext;
+}): void {
+  const ref = coerceSecretRef(params.hooks.token, params.defaults);
+  if (!ref) {
+    return;
+  }
+  pushAssignment(params.context, {
+    ref,
+    path: "hooks.token",
+    expected: "string",
+    apply: (value) => {
+      params.hooks.token = value;
+    },
+  });
+}
+
+function collectGatewayAuthTokenAssignment(params: {
+  auth: GatewayAuthConfigLike;
+  defaults: SecretDefaults | undefined;
+  context: ResolverContext;
+}): void {
+  const ref = coerceSecretRef(params.auth.token, params.defaults);
+  if (!ref) {
+    return;
+  }
+  pushAssignment(params.context, {
+    ref,
+    path: "gateway.auth.token",
+    expected: "string",
+    apply: (value) => {
+      params.auth.token = value;
+    },
+  });
+}
+
+function collectTelegramBotTokenAssignment(params: {
+  account: TelegramAccountLike;
+  path: string;
+  defaults: SecretDefaults | undefined;
+  context: ResolverContext;
+}): void {
+  const ref = coerceSecretRef(params.account.botToken, params.defaults);
+  if (!ref) {
+    return;
+  }
+  pushAssignment(params.context, {
+    ref,
+    path: `${params.path}.botToken`,
+    expected: "string",
+    apply: (value) => {
+      params.account.botToken = value;
+    },
+  });
+}
+
+function collectTelegramAssignments(params: {
+  telegram: TelegramAccountLike & { accounts?: Record<string, unknown> };
+  defaults: SecretDefaults | undefined;
+  context: ResolverContext;
+}): void {
+  collectTelegramBotTokenAssignment({
+    account: params.telegram,
+    path: "channels.telegram",
+    defaults: params.defaults,
+    context: params.context,
+  });
+  if (!isRecord(params.telegram.accounts)) {
+    return;
+  }
+  for (const [accountId, account] of Object.entries(params.telegram.accounts)) {
+    if (!isRecord(account)) {
+      continue;
+    }
+    collectTelegramBotTokenAssignment({
+      account: account as TelegramAccountLike,
+      path: `channels.telegram.accounts.${accountId}`,
+      defaults: params.defaults,
+      context: params.context,
+    });
+  }
+}
+
+function collectWebSearchApiKeyAssignment(params: {
+  search: WebSearchConfigLike;
+  defaults: SecretDefaults | undefined;
+  context: ResolverContext;
+}): void {
+  const ref = coerceSecretRef(params.search.apiKey, params.defaults);
+  if (!ref) {
+    return;
+  }
+  pushAssignment(params.context, {
+    ref,
+    path: "tools.web.search.apiKey",
+    expected: "string",
+    apply: (value) => {
+      params.search.apiKey = value;
+    },
+  });
+}
+
 function collectConfigAssignments(params: {
   config: OpenClawConfig;
   context: ResolverContext;
@@ -225,6 +345,29 @@ function collectConfigAssignments(params: {
       defaults,
       context: params.context,
     });
+  }
+
+  const hooks = params.config.hooks as HooksConfigLike | undefined;
+  if (hooks) {
+    collectHooksTokenAssignment({ hooks, defaults, context: params.context });
+  }
+
+  const gatewayAuth = params.config.gateway?.auth as GatewayAuthConfigLike | undefined;
+  if (gatewayAuth) {
+    collectGatewayAuthTokenAssignment({ auth: gatewayAuth, defaults, context: params.context });
+  }
+
+  const telegram = params.config.channels?.telegram as
+    | (TelegramAccountLike & { accounts?: Record<string, unknown> })
+    | undefined;
+  if (telegram) {
+    collectTelegramAssignments({ telegram, defaults, context: params.context });
+  }
+
+  const webSearch = (params.config.tools as { web?: { search?: WebSearchConfigLike } } | undefined)
+    ?.web?.search;
+  if (webSearch) {
+    collectWebSearchApiKeyAssignment({ search: webSearch, defaults, context: params.context });
   }
 }
 

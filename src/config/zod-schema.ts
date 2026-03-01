@@ -415,7 +415,7 @@ export const OpenClawSchema = z
       .object({
         enabled: z.boolean().optional(),
         path: z.string().optional(),
-        token: z.string().optional().register(sensitive),
+        token: SecretInputSchema.optional().register(sensitive),
         defaultSessionKey: z.string().optional(),
         allowRequestSessionKey: z.boolean().optional(),
         allowedSessionKeyPrefixes: z.array(z.string()).optional(),
@@ -535,7 +535,7 @@ export const OpenClawSchema = z
                 z.literal("trusted-proxy"),
               ])
               .optional(),
-            token: z.string().optional().register(sensitive),
+            token: SecretInputSchema.optional().register(sensitive),
             password: z.string().optional().register(sensitive),
             allowTailscale: z.boolean().optional(),
             rateLimit: z

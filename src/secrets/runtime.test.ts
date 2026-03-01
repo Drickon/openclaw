@@ -268,3 +268,46 @@ describe("secrets runtime snapshot", () => {
     }
   });
 });
+
+it("resolves SecretRef for hooks.token, gateway.auth.token, telegram.botToken, web.search.apiKey", async () => {
+  // Build config via JSON round-trip so Zod accepts SecretRef objects in
+  // fields whose TS types are still `string` (post-resolution type).
+  const rawConfig = {
+    hooks: { token: { source: "env", provider: "default", id: "HOOKS_TOKEN" } },
+    gateway: { auth: { token: { source: "env", provider: "default", id: "GW_AUTH_TOKEN" } } },
+    channels: {
+      telegram: {
+        botToken: { source: "env", provider: "default", id: "TG_BOT_TOKEN" },
+        accounts: {
+          test: { botToken: { source: "env", provider: "default", id: "TG_TEST_BOT_TOKEN" } },
+        },
+      },
+    },
+    tools: {
+      web: { search: { apiKey: { source: "env", provider: "default", id: "BRAVE_API_KEY" } } },
+    },
+  };
+  const config = rawConfig as unknown as OpenClawConfig;
+
+  const snapshot = await prepareSecretsRuntimeSnapshot({
+    config,
+    env: {
+      HOOKS_TOKEN: "hooks-resolved",
+      GW_AUTH_TOKEN: "gw-resolved",
+      TG_BOT_TOKEN: "tg-resolved",
+      TG_TEST_BOT_TOKEN: "tg-test-resolved",
+      BRAVE_API_KEY: "brave-resolved",
+    },
+    agentDirs: [],
+    loadAuthStore: () => ({ version: 1, profiles: {} }),
+  });
+
+  expect(snapshot.config.hooks?.token).toBe("hooks-resolved");
+  expect(snapshot.config.gateway?.auth?.token).toBe("gw-resolved");
+  expect(snapshot.config.channels?.telegram?.botToken).toBe("tg-resolved");
+  expect(
+    (snapshot.config.channels?.telegram?.accounts as Record<string, { botToken?: string }>)?.test
+      ?.botToken,
+  ).toBe("tg-test-resolved");
+  expect(snapshot.config.tools?.web?.search?.apiKey).toBe("brave-resolved");
+});
