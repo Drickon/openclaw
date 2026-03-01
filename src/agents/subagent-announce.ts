@@ -1422,7 +1422,7 @@ export async function runSubagentAnnounceFlow(params: {
         params: {
           sessionKey: resolveRequesterStoreKey(cfg, targetRequesterSessionKey),
           message: silentTrigger,
-          deliver: Boolean(silentChannel && silentTo),
+          deliver: false,
           channel: silentChannel,
           to: silentTo,
           accountId: silentOrigin?.accountId,
