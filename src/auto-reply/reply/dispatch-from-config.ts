@@ -201,30 +201,39 @@ export async function dispatchReplyFromConfig(params: {
   }
 
   // Bridge to internal hooks (HOOK.md discovery system) - refs #8807
+  // Awaited (not fire-and-forget) so hooks can inject context via
+  // enqueueSystemEvent before the agent processes the message.
   if (sessionKey) {
-    void triggerInternalHook(
-      createInternalHookEvent("message", "received", sessionKey, {
-        from: ctx.From ?? "",
-        content,
-        timestamp,
-        channelId,
-        accountId: ctx.AccountId,
-        conversationId,
-        messageId: messageIdForHook,
-        metadata: {
-          to: ctx.To,
-          provider: ctx.Provider,
-          surface: ctx.Surface,
-          threadId: ctx.MessageThreadId,
-          senderId: ctx.SenderId,
-          senderName: ctx.SenderName,
-          senderUsername: ctx.SenderUsername,
-          senderE164: ctx.SenderE164,
-        },
-      }),
-    ).catch((err) => {
+    try {
+      await Promise.race([
+        triggerInternalHook(
+          createInternalHookEvent("message", "received", sessionKey, {
+            from: ctx.From ?? "",
+            content,
+            timestamp,
+            channelId,
+            accountId: ctx.AccountId,
+            conversationId,
+            messageId: messageIdForHook,
+            metadata: {
+              to: ctx.To,
+              provider: ctx.Provider,
+              surface: ctx.Surface,
+              threadId: ctx.MessageThreadId,
+              senderId: ctx.SenderId,
+              senderName: ctx.SenderName,
+              senderUsername: ctx.SenderUsername,
+              senderE164: ctx.SenderE164,
+            },
+          }),
+        ),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("message:received hook timeout")), 2000),
+        ),
+      ]);
+    } catch (err) {
       logVerbose(`dispatch-from-config: message_received internal hook failed: ${String(err)}`);
-    });
+    }
   }
 
   // Check if we should route replies to originating channel instead of dispatcher.
