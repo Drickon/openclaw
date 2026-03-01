@@ -1403,19 +1403,53 @@ export async function runSubagentAnnounceFlow(params: {
       directIdempotencyKey,
       signal: params.signal,
     });
-    didAnnounce = delivery.delivered;
-
-    // When completionMessage was sent directly to Telegram (path="direct" with expectsCompletionMessage=true),
-    // Atlas was bypassed entirely. Fire a silent trigger so Atlas processes the result immediately
-    // rather than waiting for the next user message.
+    // Cron delivery state should only be marked as delivered when we have a
+    // direct path result. Queue/steer means "accepted for later processing",
+    // not a confirmed channel send, and can otherwise produce false positives.
     if (
+      announceType === "cron job" &&
+      (delivery.path === "queued" || delivery.path === "steered")
+    ) {
+      didAnnounce = false;
+    } else {
+      didAnnounce = delivery.delivered;
+    }
+
+    // When the last non-bound run-mode sub-agent completion was sent directly
+    // to the channel (bypassing the requester session entirely), fire a
+    // lightweight silent trigger so the requester processes the result
+    // immediately rather than waiting for the next user message.
+    // Guards: run-mode only (session-mode uses bound-thread routing), no
+    // remaining sibling runs, not a cron announce.
+    // Only fire the silent trigger when the completion message was actually
+    // delivered to the user channel via method:"send" (not via the internal
+    // method:"agent" fallback injected into the requester session, which
+    // already wakes the requester and would cause a duplicate turn).
+    // A valid completionDirectOrigin with channel+to signals a real send path.
+    const hadDirectSendRoute =
+      Boolean(completionResolution.origin?.channel) && Boolean(completionResolution.origin?.to);
+    const isSilentTriggerCandidate =
       delivery.delivered &&
       delivery.path === "direct" &&
+      hadDirectSendRoute &&
       !requesterIsSubagent &&
       expectsCompletionMessage &&
-      findings.trim() &&
-      findings !== "(no output)"
-    ) {
+      announceType !== "cron job" &&
+      params.spawnMode !== "session" &&
+      findings.trim().length > 0 &&
+      findings !== "(no output)";
+
+    let activeRunsForTrigger = 1; // default conservative: assume siblings exist
+    if (isSilentTriggerCandidate) {
+      try {
+        const { countActiveDescendantRuns } = await import("./subagent-registry.js");
+        activeRunsForTrigger = Math.max(0, countActiveDescendantRuns(targetRequesterSessionKey));
+      } catch {
+        // Best-effort; if unavailable skip the trigger (conservative).
+      }
+    }
+
+    if (isSilentTriggerCandidate && activeRunsForTrigger === 0) {
       const silentTrigger = [
         `[System Message] [sessionId: ${announceSessionId}] A ${announceType} "${taskLabel}" just ${statusLabel}.`,
         "",
@@ -1457,7 +1491,6 @@ export async function runSubagentAnnounceFlow(params: {
         // Best-effort only — don't fail the announce if this trigger fails
       });
     }
-
 
     if (!delivery.delivered && delivery.path === "direct" && delivery.error) {
       defaultRuntime.error?.(
