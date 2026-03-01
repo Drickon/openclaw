@@ -1357,6 +1357,84 @@ export async function runSubagentAnnounceFlow(params: {
     } else {
       didAnnounce = delivery.delivered;
     }
+
+    // When the last non-bound run-mode sub-agent completion was sent directly
+    // to the channel (bypassing the requester session entirely), fire a
+    // lightweight silent trigger so the requester processes the result
+    // immediately rather than waiting for the next user message.
+    // Guards: run-mode only (session-mode uses bound-thread routing), no
+    // remaining sibling runs, not a cron announce.
+    // Only fire the silent trigger when the completion message was actually
+    // delivered to the user channel via method:"send" (not via the internal
+    // method:"agent" fallback injected into the requester session, which
+    // already wakes the requester and would cause a duplicate turn).
+    // A valid completionDirectOrigin with channel+to signals a real send path.
+    const hadDirectSendRoute =
+      Boolean(completionResolution.origin?.channel) && Boolean(completionResolution.origin?.to);
+    const isSilentTriggerCandidate =
+      delivery.delivered &&
+      delivery.path === "direct" &&
+      hadDirectSendRoute &&
+      !requesterIsSubagent &&
+      expectsCompletionMessage &&
+      announceType !== "cron job" &&
+      params.spawnMode !== "session" &&
+      findings.trim().length > 0 &&
+      findings !== "(no output)";
+
+    let activeRunsForTrigger = 1; // default conservative: assume siblings exist
+    if (isSilentTriggerCandidate) {
+      try {
+        const { countActiveDescendantRuns } = await import("./subagent-registry.js");
+        activeRunsForTrigger = Math.max(0, countActiveDescendantRuns(targetRequesterSessionKey));
+      } catch {
+        // Best-effort; if unavailable skip the trigger (conservative).
+      }
+    }
+
+    if (isSilentTriggerCandidate && activeRunsForTrigger === 0) {
+      const silentTrigger = [
+        `[System Message] [sessionId: ${announceSessionId}] A ${announceType} "${taskLabel}" just ${statusLabel}.`,
+        "",
+        "Result:",
+        findings.length > 1_500
+          ? `${findings.slice(0, 1_500)}\n…_(full output in session history)_`
+          : findings,
+        "",
+        statsLine,
+        "",
+        `The result above was already delivered directly to the user. Process it internally (update state, log if needed), then reply: ${SILENT_REPLY_TOKEN}`,
+      ].join("\n");
+
+      const silentOrigin = normalizeDeliveryContext(completionDirectOrigin ?? directOrigin);
+      const silentChannel =
+        typeof silentOrigin?.channel === "string" &&
+        isDeliverableMessageChannel(silentOrigin.channel)
+          ? silentOrigin.channel
+          : undefined;
+      const silentTo = typeof silentOrigin?.to === "string" ? silentOrigin.to : undefined;
+
+      const cfg = loadConfig();
+      const announceTimeoutMs = resolveSubagentAnnounceTimeoutMs(cfg);
+
+      callGateway({
+        method: "agent",
+        params: {
+          sessionKey: resolveRequesterStoreKey(cfg, targetRequesterSessionKey),
+          message: silentTrigger,
+          deliver: Boolean(silentChannel && silentTo),
+          channel: silentChannel,
+          to: silentTo,
+          accountId: silentOrigin?.accountId,
+          threadId: silentOrigin?.threadId != null ? String(silentOrigin.threadId) : undefined,
+          idempotencyKey: buildAnnounceIdempotencyKey(announceId) + ":silent",
+        },
+        timeoutMs: announceTimeoutMs,
+      }).catch(() => {
+        // Best-effort only — don't fail the announce if this trigger fails
+      });
+    }
+
     if (!delivery.delivered && delivery.path === "direct" && delivery.error) {
       defaultRuntime.error?.(
         `Subagent completion direct announce failed for run ${params.childRunId}: ${delivery.error}`,
