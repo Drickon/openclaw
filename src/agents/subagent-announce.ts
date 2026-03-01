@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
@@ -65,22 +67,62 @@ function resolveSubagentAnnounceTimeoutMs(cfg: ReturnType<typeof loadConfig>): n
   return Math.min(Math.max(1, Math.floor(configured)), MAX_TIMER_SAFE_TIMEOUT_MS);
 }
 
+function resolveSubagentOutputDir(cfg: ReturnType<typeof loadConfig>): string {
+  const configured = (cfg.agents?.defaults?.subagents as Record<string, unknown> | undefined)
+    ?.outputDir;
+  if (typeof configured === "string" && configured.trim()) {
+    return configured.trim().replace(/^~/, process.env.HOME ?? "");
+  }
+  const home = process.env.HOME ?? "/root";
+  return `${home}/.openclaw/workspace/tmp/agent-output`;
+}
+
+function saveOutputToTempFile(params: {
+  findings: string;
+  label: string;
+  runId: string;
+  outputDir: string;
+}): string | undefined {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const safeName = (params.label || "agent").replace(/[^a-z0-9-]/gi, "-").slice(0, 40);
+    const safeRunId = params.runId.slice(0, 8);
+    const filename = `${timestamp}-${safeName}-${safeRunId}.md`;
+    const filePath = join(params.outputDir, filename);
+    mkdirSync(params.outputDir, { recursive: true });
+    writeFileSync(filePath, params.findings, "utf8");
+    return filePath;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildCompletionDeliveryMessage(params: {
   findings: string;
   subagentName: string;
   spawnMode?: SpawnSubagentMode;
   outcome?: SubagentRunOutcome;
-  announceType?: SubagentAnnounceType;
+  outputFilePath?: string;
 }): string {
-  const findingsText = params.findings.trim();
-  if (isAnnounceSkip(findingsText)) {
-    return "";
+  const PREVIEW_CHARS = 1_500;
+  const rawFindings = params.findings.trim();
+  let findingsText: string;
+  if (params.outputFilePath) {
+    const preview = rawFindings.slice(0, PREVIEW_CHARS);
+    const truncated = rawFindings.length > PREVIEW_CHARS;
+    // Show workspace-relative path for readability
+    const displayPath = params.outputFilePath.replace(/.*\/.openclaw\/workspace\//, "");
+    findingsText = truncated
+      ? `${preview}\n…\n\n_Full output saved: \`${displayPath}\`_`
+      : `${preview}\n\n_Full output saved: \`${displayPath}\`_`;
+  } else {
+    const MAX_FINDINGS_CHARS = 3_000;
+    const findingsTruncated = rawFindings.length > MAX_FINDINGS_CHARS;
+    findingsText = findingsTruncated
+      ? `${rawFindings.slice(0, MAX_FINDINGS_CHARS)}\n…_(output truncated — use sessions_history for full results)_`
+      : rawFindings;
   }
   const hasFindings = findingsText.length > 0 && findingsText !== "(no output)";
-  // Cron completions are standalone messages — skip the subagent status header.
-  if (params.announceType === "cron job") {
-    return hasFindings ? findingsText : "";
-  }
   const header = (() => {
     if (params.outcome?.status === "error") {
       return params.spawnMode === "session"
@@ -1278,18 +1320,33 @@ export async function runSubagentAnnounceFlow(params: {
       startedAt: params.startedAt,
       endedAt: params.endedAt,
     });
+    const cfg2 = loadConfig();
+    const outputDir = resolveSubagentOutputDir(cfg2);
+    const OUTPUT_THRESHOLD = 3_000;
+    const savedFilePath =
+      findings.length > OUTPUT_THRESHOLD
+        ? saveOutputToTempFile({
+            findings,
+            label: params.label ?? params.task?.slice(0, 40) ?? "agent",
+            runId: params.childRunId,
+            outputDir,
+          })
+        : undefined;
     completionMessage = buildCompletionDeliveryMessage({
       findings,
       subagentName,
       spawnMode: params.spawnMode,
       outcome,
-      announceType,
+      outputFilePath: savedFilePath,
     });
+    const findingsForContext = savedFilePath
+      ? `${findings.slice(0, 1_500)}\n…\n\n_Full output saved: \`${savedFilePath}\`_`
+      : findings;
     const internalSummaryMessage = [
       `[System Message] [sessionId: ${announceSessionId}] A ${announceType} "${taskLabel}" just ${statusLabel}.`,
       "",
       "Result:",
-      findings,
+      findingsForContext,
       "",
       statsLine,
     ].join("\n");
@@ -1346,17 +1403,8 @@ export async function runSubagentAnnounceFlow(params: {
       directIdempotencyKey,
       signal: params.signal,
     });
-    // Cron delivery state should only be marked as delivered when we have a
-    // direct path result. Queue/steer means "accepted for later processing",
-    // not a confirmed channel send, and can otherwise produce false positives.
-    if (
-      announceType === "cron job" &&
-      (delivery.path === "queued" || delivery.path === "steered")
-    ) {
-      didAnnounce = false;
-    } else {
-      didAnnounce = delivery.delivered;
-    }
+    didAnnounce = delivery.delivered;
+
     if (!delivery.delivered && delivery.path === "direct" && delivery.error) {
       defaultRuntime.error?.(
         `Subagent completion direct announce failed for run ${params.childRunId}: ${delivery.error}`,
