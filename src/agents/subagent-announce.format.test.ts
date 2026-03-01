@@ -389,7 +389,7 @@ describe("subagent announce formatting", () => {
 
     expect(didAnnounce).toBe(true);
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(agentSpy).toHaveBeenCalledTimes(1);
+    expect(agentSpy).toHaveBeenCalledTimes(0);
     const call = sendSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
     const rawMessage = call?.params?.message;
     const msg = typeof rawMessage === "string" ? rawMessage : "";
@@ -471,7 +471,7 @@ describe("subagent announce formatting", () => {
 
     expect(didAnnounce).toBe(true);
     expect(sendSpy).toHaveBeenCalledTimes(3);
-    expect(agentSpy).toHaveBeenCalledTimes(1);
+    expect(agentSpy).toHaveBeenCalledTimes(0);
   });
 
   it("does not retry completion direct send on permanent channel errors", async () => {
@@ -834,7 +834,7 @@ describe("subagent announce formatting", () => {
 
       expect(didAnnounce).toBe(true);
       expect(sendSpy).toHaveBeenCalledTimes(1);
-      expect(agentSpy).toHaveBeenCalledTimes(1);
+      expect(agentSpy).toHaveBeenCalledTimes(0);
       const call = sendSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
       expect(call?.params?.channel).toBe("discord");
       expect(call?.params?.to).toBe("channel:12345");
@@ -876,7 +876,7 @@ describe("subagent announce formatting", () => {
 
     expect(didAnnounce).toBe(true);
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(agentSpy).toHaveBeenCalledTimes(1);
+    expect(agentSpy).toHaveBeenCalledTimes(0);
     const call = sendSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
     expect(call?.params?.channel).toBe("telegram");
     expect(call?.params?.to).toBe("123");
@@ -1229,7 +1229,7 @@ describe("subagent announce formatting", () => {
 
     expect(didAnnounce).toBe(true);
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(agentSpy).toHaveBeenCalledTimes(1);
+    expect(agentSpy).toHaveBeenCalledTimes(0);
     expect(sendSpy.mock.calls[0]?.[0]).toMatchObject({
       method: "send",
       params: {
