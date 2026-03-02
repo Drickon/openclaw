@@ -71,7 +71,7 @@ function resolveSubagentOutputDir(cfg: ReturnType<typeof loadConfig>): string {
   const configured = (cfg.agents?.defaults?.subagents as Record<string, unknown> | undefined)
     ?.outputDir;
   if (typeof configured === "string" && configured.trim()) {
-    return configured.trim().replace(/^~/, process.env.HOME ?? "");
+    return configured.trim().replace(/^~/, process.env.HOME ?? "/root");
   }
   const home = process.env.HOME ?? "/root";
   return `${home}/.openclaw/workspace/tmp/agent-output`;
@@ -111,7 +111,9 @@ function buildCompletionDeliveryMessage(params: {
     const preview = rawFindings.slice(0, PREVIEW_CHARS);
     const truncated = rawFindings.length > PREVIEW_CHARS;
     // Show workspace-relative path for readability
-    const displayPath = params.outputFilePath.replace(/.*\/.openclaw\/workspace\//, "");
+    const displayPath = params.outputFilePath.includes("/.openclaw/workspace/")
+      ? params.outputFilePath.replace(/.*\/.openclaw\/workspace\//, "")
+      : params.outputFilePath;
     findingsText = truncated
       ? `${preview}\n…\n\n_Full output saved: \`${displayPath}\`_`
       : `${preview}\n\n_Full output saved: \`${displayPath}\`_`;
