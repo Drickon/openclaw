@@ -388,7 +388,7 @@ export async function performGatewaySessionReset(params: {
       ok: true;
       key: string;
       entry: SessionEntry;
-      archivedPaths: string[];
+      archivedPaths: ArchivedSessionTranscript[];
       oldSessionId: string | undefined;
       agentId: string | undefined;
     }
@@ -528,7 +528,7 @@ export async function performGatewaySessionReset(params: {
     reason: params.reason,
   });
 
-  const archivedPaths = archiveSessionTranscriptsForSession({
+  const archivedTranscripts = archiveSessionTranscriptsForSessionDetailed({
     sessionId: oldSessionId,
     storePath,
     sessionFile: oldSessionFile,
@@ -576,7 +576,7 @@ export async function performGatewaySessionReset(params: {
     ok: true,
     key: target.canonicalKey,
     entry: next,
-    archivedPaths,
+    archivedPaths: archivedTranscripts,
     oldSessionId,
     agentId: target.agentId,
   };

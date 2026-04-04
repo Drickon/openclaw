@@ -9,14 +9,14 @@
  * Timer state is per-process; a gateway restart clears all timers (acceptable).
  */
 
+import {
+  deleteMessageTelegram,
+  sendMessageTelegram,
+} from "../../../../extensions/telegram/src/send.js";
+import { resolveTelegramToken } from "../../../../extensions/telegram/src/token.js";
 import { routeReply } from "../../../auto-reply/reply/route-reply.js";
 import { loadConfig } from "../../../config/config.js";
 import { createSubsystemLogger } from "../../../logging/subsystem.js";
-import {
-  deleteMessageTelegram,
-  resolveTelegramToken,
-  sendMessageTelegram,
-} from "../../../plugin-sdk/telegram.js";
 import { resolveHookConfig } from "../../config.js";
 import type { HookHandler } from "../../hooks.js";
 
