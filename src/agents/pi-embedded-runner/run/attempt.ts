@@ -206,6 +206,7 @@ function withPendingToolCallsHint(
   };
 }
 import { createInternalHookEvent, triggerInternalHook } from "../../../hooks/internal-hooks.js";
+import { SessionParseError } from "../session-parse-error.js";
 import { waitForCompactionRetryWithAggregateTimeout } from "./compaction-retry-aggregate-timeout.js";
 import {
   resolveRunTimeoutDuringCompaction,
@@ -776,7 +777,19 @@ export async function runEmbeddedAttempt(
       });
 
       await prewarmSessionFile(params.sessionFile);
-      sessionManager = guardSessionManager(SessionManager.open(params.sessionFile), {
+      let openedSession: ReturnType<typeof SessionManager.open>;
+      try {
+        openedSession = SessionManager.open(params.sessionFile);
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          throw new SessionParseError(`Failed to parse session transcript: ${err.message}`, {
+            sessionFile: params.sessionFile,
+            cause: err,
+          });
+        }
+        throw err;
+      }
+      sessionManager = guardSessionManager(openedSession, {
         agentId: sessionAgentId,
         sessionKey: params.sessionKey,
         inputProvenance: params.inputProvenance,
