@@ -88,7 +88,7 @@ export function stripReasoningTagsFromText(
   // already captured before it — that preserves the safety boundary (no reasoning leak).
   // When nothing was captured yet, the tail is almost certainly the actual answer
   // (model forgot closing tag, or stream cut off mid-tag), so recover it.
-  if (!inThinking || mode === "preserve" || !result.trim()) {
+  if (!inThinking || mode === "preserve" || result.length === 0) {
     result += cleaned.slice(lastIndex);
   }
 
